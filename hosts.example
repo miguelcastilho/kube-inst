@@ -1,15 +1,12 @@
 [all:vars]
 ansible_ssh_user=centos
 
-[local]
-localhost ansible_connection=local
-
 [master]
-master ansible_ssh_host=10.0.0.5
+master=10.0.0.1
 
 [nodes]
-node1 ansible_ssh_host=10.0.0.6
-node2 ansible_ssh_host=10.0.0.7
+node1=10.0.0.2
+node2=10.0.0.3
 
 [kube:children]
 master

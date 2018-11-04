@@ -2,7 +2,7 @@
 This is an ansible script to deploy kubernetes on bare-metal servers. Kubernetes will be installed using the kubeadm tool. This means that all kubernetes services will be running in docker containers.
 
 ## Prerequisites
-* All nodes running Ubuntu 16.04+.
+* All nodes running Ubuntu 18.04.
 * Nodes networking should be configured.
 * The nodes can be accessed with the same SSH key.
 * Ansible 2.3.
