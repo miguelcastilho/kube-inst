@@ -1,39 +1,37 @@
 ---
-# Master configuration
+- name: Generate config file
+  template:
+    src: "./templates/kubeadm.conf.j2"
+    dest: "{{ ansible_env.HOME }}/kubeadm.conf"
 
- - name: Generate config file
-   template:
-     src: "./templates/kubeadm.conf.j2"
-     dest: "{{ ansible_env.HOME }}/kubeadm.conf"
+- name: Run Kubeadm
+  shell: "kubeadm init --config {{ ansible_env.HOME }}/kubeadm.conf | grep 'kubeadm join --token'"
+  become: yes
+  register: kubeadm_token
 
- - name: Run Kubeadm
-   shell: "kubeadm init --config {{ ansible_env.HOME }}/kubeadm.conf | grep 'kubeadm join --token'"
-   become: yes
-   register: kubeadm_token
+- name: Create .kube dir
+  file: 
+    path: "{{ ansible_env.HOME }}/.kube"
+    state: directory
 
- - name: Create .kube dir
-   file: 
-     path: "{{ ansible_env.HOME }}/.kube"
-     state: directory
+- name: Copy kubeconfig to .kube
+  command: "sudo cp -i /etc/kubernetes/admin.conf {{ ansible_env.HOME }}/.kube/config"
 
- - name: Copy kubeconfig to .kube
-   shell: "sudo cp -i /etc/kubernetes/admin.conf {{ ansible_env.HOME }}/.kube/config"
+- name: Change owner of kubeconfig
+  shell: "sudo chown $(id -u):$(id -g) {{ ansible_env.HOME }}/.kube/config"
 
- - name: Change owner of kubeconfig
-   shell: "sudo chown $(id -u):$(id -g) {{ ansible_env.HOME }}/.kube/config"
+#- name: Wait for pods to be created
+#  shell: "kubectl get pods --all-namespaces | wc -l"
+#  register: result
+#  until: result.stdout == "7"
+#  retries: 60
+#  delay: 10
+#  changed_when: false
 
- - name: Wait for pods to be created
-   shell: "kubectl get pods --all-namespaces | wc -l"
-   register: result
-   until: result.stdout == "7"
-   retries: 60
-   delay: 10
-   changed_when: false
-
- - name: Wait for pods to be in running state
-   shell: "kubectl get pods -n kube-system | tail -n +2 | grep -v -w 'Running' | grep -v 'kube-dns' || true"
-   register: result
-   until: result.stdout == ""
-   retries: 60
-   delay: 10
-   changed_when: false
+#- name: Wait for pods to be in running state
+#  shell: "kubectl get pods -n kube-system | tail -n +2 | grep -v -w 'Running' | grep -v 'kube-dns' || true"
+#  register: result
+#  until: result.stdout == ""
+#  retries: 60
+#  delay: 10
+#  changed_when: false

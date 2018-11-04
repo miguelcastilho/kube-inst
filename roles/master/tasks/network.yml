@@ -1,59 +1,20 @@
 ---
-# CNI network configuration
-
- - name: deploy Calico
-   when: cni_network == "calico"
-   shell: "kubectl apply -f http://docs.projectcalico.org/v2.6/getting-started/kubernetes/installation/hosted/kubeadm/1.6/calico.yaml"
-   environment: '{{ proxy_env | default ({}) }}'
-
- - name: wait for Calico deployment
-   when: cni_network == "calico"
-   shell: "kubectl get pods --all-namespaces | grep kube-dns"
-   register: result
-   until: result.stdout.find("Running") != -1
-   retries: 60
-   delay: 10
-   changed_when: false
-
- - name: set net.bridge.bridge-nf-call-iptables=1
+ - name: Set net.bridge.bridge-nf-call-iptables=1
    shell: "sysctl net.bridge.bridge-nf-call-iptables=1"
    become: yes
-   when: cni_network == "flannel" or cni_network == "weave"
-
- - name: deploy Flannel
    when: cni_network == "flannel"
-   environment: '{{ proxy_env | default ({}) }}'
-   shell: "kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.9.0/Documentation/kube-flannel.yml"
-#   with_items:
-#   - "kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.8.0/Documentation/kube-flannel.yml"
-#   - "kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.8.0/Documentation/kube-flannel-rbac.yml"
+
+ - name: Deploy Flannel
+   when: cni_network == "flannel"
+   command: "kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/bc79dd1505b0c8681ece4de4c0d86c5cd2643275/Documentation/kube-flannel.yml"
    register: flannel
    changed_when: '"created" in flannel.stdout'
 
- - name: wait for Flannel deployment
+ - name: Wait for Flannel deployment
    when: cni_network == "flannel"
-   shell: "kubectl get pods --all-namespaces | grep kube-dns"
+   shell: "kubectl get pods --all-namespaces | grep -i CoreDNS"
    register: result
    until: result.stdout.find("Running") != -1
    retries: 60
    delay: 10
    changed_when: false
-
- - name: deploy Weave
-   when: cni_network == "weave"
-   shell: kubectl apply -f "https://cloud.weave.works/k8s/net?k8s-version=$(kubectl version | base64 | tr -d '\n')"
-   environment: '{{ proxy_env | default ({}) }}'
-   register: weave
-   changed_when: '"created" in weave.stdout'
-
- - name: wait for Weave deployment
-   when: cni_network == "weave"
-   shell: "kubectl get pods --all-namespaces | grep kube-dns"
-   register: result
-   until: result.stdout.find("Running") != -1
-   retries: 60
-   delay: 10
-   changed_when: false
-
- - name: Wait for 10 seconds
-   pause: seconds=10

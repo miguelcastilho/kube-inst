@@ -1,230 +1,77 @@
 ---
+- name: apt-get upgrade
+  apt:
+    upgrade: yes
+    update_cache: yes
+  become: yes   
 
-- include: preconf.yml
-- include: ntp.yml
-- include: etc-hosts.yml
+- name: disable swap
+  shell: swapoff -a
+  become: yes
 
-- name: Install curl and apt-transport-https
+- name: Install required packages for docker
   package:
     name: "{{ item }}"
     state: latest
   with_items:
   - curl
   - apt-transport-https
+  - ca-certificates
+  - software-properties-common
   become: yes
-  when: ansible_os_family == "Debian"
 
 - name: Add docker repo key
   apt_key:
     url: https://download.docker.com/linux/ubuntu/gpg
     state: present
-  environment: '{{ proxy_env | default ({}) }}'
   become: yes
-  when: ansible_os_family == "Debian"
 
 - name: Add docker repo
-  shell:
-    cmd: |
-      cat <<EOF >/etc/apt/sources.list.d/docker.list
-      deb https://download.docker.com/linux/$(lsb_release -si | tr '[:upper:]' '[:lower:]') $(lsb_release -cs) stable
-      EOF
+  shell: add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
   become: yes
-  when: ansible_os_family == "Debian"
 
-- name: Install Docker for Debian
-  shell: apt-get update && apt-get install -y --allow-downgrades docker-ce=$(apt-cache madison docker-ce | grep 17.03 | head -1 | awk '{print $3}')
-  environment: '{{ proxy_env | default ({}) }}'
-  become: yes
-  when: ansible_os_family == "Debian"
-
-#- name: Clean docker images
-#  shell: docker rmi $(docker images -q)
-#  become: yes
-#  when: full_clean is defined and full_clean
-
-- name: Remove packages
+- name: Install Docker
   package:
-    name: "{{ item }}"
-    state: absent
-  with_items:
-  - kubelet
-  - kubeadm
-  - kubectl
-  when: full_clean is defined and full_clean
-  become: yes
-
-- name: install docker dependencies
-  package:
-    name: "{{ item }}"
-    state: present
-  with_items:
-    - yum-utils 
-    - device-mapper-persistent-data 
-    - lvm2
-  environment: '{{ proxy_env | default ({}) }}'
-  become: yes
-  when: ansible_os_family == "RedHat"
-
-- name: Setup yum repo for docker
-  shell: "yum-config-manager --add-repo {{ centos_docker_repo }}"
-  environment: '{{ proxy_env | default ({}) }}'
-  when: ansible_os_family == "RedHat"
-  become: yes
-
-- name: Enable docker repo
-  shell: "yum-config-manager --enable docker-ce-edge"
-  when: ansible_os_family == "RedHat"
-  become: yes
-
-- name: Install Docker for RedHat
-  yum:
     name: docker-ce
     state: latest
-  environment: '{{ proxy_env | default ({}) }}'
-  become: yes
-  when: ansible_os_family == "RedHat"
-
-- name: create systemd docker.service
-  file:
-    path: /etc/systemd/system/docker.service.d
-    state: directory
   become: yes
 
-- name: Add proxy to docker
-  template:
-    src: ./templates/http-proxy.conf.j2
-    dest: /etc/systemd/system/docker.service.d/http-proxy.conf
-  become: yes
-  when: proxy is defined
-
-- name: Reload systemd
-  command: systemctl daemon-reload
-  become: yes
-
-- name: Restart docker
-  systemd:
+- name: Create Docker group
+  group:
     name: docker
-    state: restarted
-    enabled: yes
-  become: yes
-
-- name: Change docker cgroup driver to systemd
-  shell:
-    cmd: |
-      cat << EOF > /etc/docker/daemon.json
-      {
-        "exec-opts": ["native.cgroupdriver=systemd"]
-      }
-      EOF
-  become: yes
-  when: ansible_os_family == "RedHat"
-
-- name: Add Kubernetes repo for RedHat
-  shell:
-    cmd: |
-      cat <<EOF > /etc/yum.repos.d/kubernetes.repo
-      [kubernetes]
-      name=Kubernetes
-      baseurl=https://packages.cloud.google.com/yum/repos/kubernetes-el7-x86_64
-      enabled=1
-      gpgcheck=1
-      repo_gpgcheck=1
-      gpgkey=https://packages.cloud.google.com/yum/doc/yum-key.gpg https://packages.cloud.google.com/yum/doc/rpm-package-key.gpg
-      EOF
-#  copy:
-#     src: ./files/kubernetes.repo
-#     dest: /etc/yum.repos.d/kubernetes.repo
-  become: yes
-  when: ansible_os_family == "RedHat"
-
-- name: Update cache
-  shell: yum makecache fast -y
-  become: yes
-  when: ansible_os_family == "RedHat"
-
-- name: setenforce = 0
-  shell: setenforce 0
-  become: yes
-  when: ansible_os_family == "RedHat"
-
-- name: net.bridge.bridge-nf-call-iptables = 1
-  shell:
-    cmd: |
-      cat <<EOF >  /etc/sysctl.d/k8s.conf
-      net.bridge.bridge-nf-call-ip6tables = 1
-      net.bridge.bridge-nf-call-iptables = 1
-      EOF
-#  copy:
-#    src: ./files/k8s.conf
-#    dest: /etc/sysctl.d/k8s.conf
-  become: yes
-  when: ansible_os_family == "RedHat"
-    
-- name: Update sysctl
-  shell: sysctl --system
-  become: yes
-  when: ansible_os_family == "RedHat"
-
-- name: Add apt key
-  apt_key:
-    url: "https://packages.cloud.google.com/apt/doc/apt-key.gpg"
     state: present
-  environment: '{{ proxy_env | default ({}) }}'
   become: yes
-  when: ansible_os_family == "Debian"
 
-- name: Add Kubernetes repo for Debian
+- name: Add user to the group
+  user:
+    name: '{{ ssh_user }}'
+    groups: docker
+    append: yes
+  become: yes
+
+- name: Add Kubernetes repo key
+  apt_key:
+    url: https://packages.cloud.google.com/apt/doc/apt-key.gpg
+    state: present
+  become: yes
+
+- name: Add Kubernetes repo
   apt_repository:
-    repo: deb http://apt.kubernetes.io/ kubernetes-xenial main
+    repo: deb https://apt.kubernetes.io/ kubernetes-xenial main
     state: present
     update_cache: yes
-  environment: '{{ proxy_env | default ({}) }}'
-  when: ansible_os_family == "Debian"
   become: yes
 
 - name: Install kubernetes packages
   package:
     name: "{{ item }}"
-    state: installed
+    state: latest
   with_items:
   - kubelet
   - kubeadm
   - kubectl
-  environment: '{{ proxy_env | default ({}) }}'
   become: yes
 
-- name: Restart docker
-  systemd:
-    name: docker
-    state: restarted
-    enabled: yes
+- name: Hold kubernetes packages
+  command: apt-mark hold kubelet kubeadm kubectl
   become: yes
-
-- name: Restart kubelet
-  systemd:
-    state: stopped
-    name: kubelet
-    enabled: yes
-  become: yes
-
-#- name: Read docker cgroup
-#  shell: "docker info 2>/dev/null | grep -i cgroup | cut -d ' ' -f 3"
-#  register: docker_cgroup
-#  become: yes
-#  changed_when: false
-
-#- name: Verify kubelet cgroup
-#  shell: cat /etc/systemd/system/kubelet.service.d/10-kubeadm.conf | grep -i "kubelet_cgroup_args=" | cut -d '=' -f 4 | sed 's/"$//'
-#  register: kubelet_cgroup
-#  changed_when: false
-
-#- name: Sync kubelet cgroup with docker cgroup
-#  lineinfile:
-#    path: /etc/systemd/system/kubelet.service.d/10-kubeadm.conf
-#    regexp: '^Environment="KUBELET_CGROUP_ARGS=--cgroup-driver=*'
-#    line: 'Environment="KUBELET_CGROUP_ARGS=--cgroup-driver={{ docker_cgroup.stdout }}"'
-#  when: docker_cgroup.stdout != kubelet_cgroup.stdout
-#  become: yes
-#  notify:
-#  - Reload systemd
-#  - Restart kubelet
