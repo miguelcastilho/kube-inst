@@ -5,9 +5,14 @@
     dest: "{{ ansible_env.HOME }}/kubeadm.conf"
 
 - name: Run Kubeadm
-  shell: "kubeadm init --config {{ ansible_env.HOME }}/kubeadm.conf | grep 'kubeadm join --token'"
+  shell: "kubeadm init --config {{ ansible_env.HOME }}/kubeadm.conf"
   become: yes
   register: kubeadm_token
+
+- name: output of kubeadm
+  debug:
+    var: kubeadm_token
+
 
 - name: Create .kube dir
   file: 
